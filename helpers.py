@@ -5,8 +5,8 @@ from collections import deque
 
 class CustomOpen(object):
 
-    def __init__(self, filename):
-        self.file = open(filename)
+    def __init__(self, filename, mode='r'):
+        self.file = open(filename, mode)
 
     def __enter__(self):
         return self.file
