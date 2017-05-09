@@ -4,93 +4,176 @@ import sys
 from Queue import PriorityQueue
 from helpers import CustomOpen, CharTree
 
-
-def create_char_freq_map(filename):
-
-    char_frequency_dict = {}
-
-    with CustomOpen(filename) as f:
-        contents = f.read()
-        for char in contents:
-            value = char_frequency_dict.get(char, 0)
-            char_frequency_dict[char] = value + 1
-
-    return char_frequency_dict
+BYTE_LENGTH = 8
 
 
-def create_priority_queue(char_dict):
+class Colors(object):
 
-    char_priority_queue_dict = PriorityQueue()
-
-    for char, frequency in char_dict.iteritems():
-        char_priority_queue_dict.put((frequency, CharTree(frequency, char)))
-
-    return char_priority_queue_dict
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    BOLD = '\033[1m'
+    ENDC = '\033[0m'
 
 
-def create_priority_binary_tree(priority_queue):
+class HuffmanCoding(object):
 
-    while priority_queue.qsize() > 1:
-        print 'Current priority queue size: {num}'.format(num=priority_queue.qsize())
-        tree_one = priority_queue.get()
-        tree_two = priority_queue.get()
-        total_freq = tree_one[0] + tree_two[0]
-        print '\t-> total frequency: {freq}'.format(freq=total_freq)
-        root = CharTree(total_freq, None, tree_one, tree_two)
-        priority_queue.put((total_freq, root))
+    def __init__(self, filename):
+        self.original_file = filename
+        self.compressed_file = filename.split('.')[0] + '_compressed.bin'
+        self.decompressed_file = filename.split('.')[0] + '_decompressed.txt'
+        self.char_frequency_dict = {}
+        self.priority_queue = PriorityQueue()
+        self.huffman_tree = None
+        self.char_to_code_mapping = {}
+        self.code_to_char_mapping = {}
 
-    print '\nFinal length of priority queue: {length}'.format(length=priority_queue.qsize())
-    return priority_queue.get()
+    def create_char_frequency_map(self):
 
+        with CustomOpen(self.original_file) as f:
+            contents = f.read()
+            for char in contents:
+                value = self.char_frequency_dict.get(char, 0)
+                self.char_frequency_dict[char] = value + 1
 
-def create_char_code_map(huffman_tree, mapping, code):
+        print 'Character frequency mapping: {dict}\n'.format(dict=self.char_frequency_dict)
 
-    if huffman_tree.data[1] is not None:
-        mapping[huffman_tree.data[1]] = code
-    if huffman_tree.left is not None:
-        create_char_code_map(huffman_tree.left[1], mapping, code+'0')
-    if huffman_tree.right is not None:
-        create_char_code_map(huffman_tree.right[1], mapping, code+'1')
+    def create_priority_queue(self):
 
-    return mapping
+        for char, frequency in self.char_frequency_dict.iteritems():
+            self.priority_queue.put((frequency, CharTree(frequency, char)))
 
+        print 'Character frequency priority queue mapping: {dict}\n'.format(dict=self.priority_queue)
 
-def write_compressed_file(filename, char_code_mapping):
+    def create_priority_binary_tree(self):
 
-    output = ''
-    output_filename = filename.split('.')[0] + '_compressed.' + filename.split('.')[1]
+        while self.priority_queue.qsize() > 1:
+            print 'Current priority queue size: {num}'.format(num=self.priority_queue.qsize())
+            tree_one = self.priority_queue.get()
+            tree_two = self.priority_queue.get()
+            total_freq = tree_one[0] + tree_two[0]
+            print '\t-> total frequency: {freq}'.format(freq=total_freq)
+            root = CharTree(total_freq, None, tree_one, tree_two)
+            self.priority_queue.put((total_freq, root))
 
-    with CustomOpen(filename) as f:
-        contents = f.read()
-        for char in contents:
-            output += char_code_mapping[char]
+        print '\nFinal length of priority queue: {length}'.format(length=self.priority_queue.qsize())
 
-    print output
+        self.huffman_tree = self.priority_queue.get()[1]
 
-    with CustomOpen(output_filename, 'wb') as f:
-        f.write(output)
+    def create_char_code_map(self, huffman_tree, code):
+
+        if huffman_tree.data[1] is not None:
+            self.char_to_code_mapping[huffman_tree.data[1]] = code
+        if huffman_tree.left is not None:
+            self.create_char_code_map(huffman_tree.left[1], code + '0')
+        if huffman_tree.right is not None:
+            self.create_char_code_map(huffman_tree.right[1], code + '1')
+
+        print 'Character to code mapping: {dict}\n'.format(dict=self.char_to_code_mapping)
+
+    @staticmethod
+    def add_padding(text):
+
+        padding_length = BYTE_LENGTH - len(text) % BYTE_LENGTH
+        padding_data = "{0:08b}".format(padding_length)
+        padding = '0' * padding_length
+        padded_text = padding_data + text + padding
+
+        return padded_text
+
+    @staticmethod
+    def convert_string_to_byte_array(text):
+
+        b = bytearray()
+
+        for i in range(0, len(text), BYTE_LENGTH):
+            byte = text[i:i+BYTE_LENGTH]
+            b.append(int(byte, 2))
+
+        return b
+
+    def write_compressed_file(self):
+
+        print Colors.OKBLUE + Colors.BOLD + 'COMPRESSING FILE...' + Colors.ENDC
+
+        with CustomOpen(self.original_file) as input_file, CustomOpen(self.compressed_file, 'wb') as output_file:
+            encoded_text = ''
+            contents = input_file.read()
+
+            for char in contents:
+                encoded_text += self.char_to_code_mapping[char]
+            padded_encoded_text = self.add_padding(encoded_text)
+            bytes = self.convert_string_to_byte_array(padded_encoded_text)
+
+            output_file.write(bytes)
+
+        print Colors.OKGREEN + Colors.BOLD + 'FILE COMPRESSED' + Colors.ENDC
+
+    def create_code_char_map(self):
+
+        for char, code in self.char_to_code_mapping.iteritems():
+            self.code_to_char_mapping[code] = char
+
+        print '\nCode to character mapping: {dict}\n'.format(dict=self.code_to_char_mapping)
+
+    @staticmethod
+    def remove_padding(text):
+
+        padded_data = text[:BYTE_LENGTH]
+        extra_padding = int(padded_data, 2)
+
+        encoded_text = text[BYTE_LENGTH:-1*extra_padding]
+
+        return encoded_text
+
+    def decode_text(self, text):
+
+        current_code = ''
+        decoded_text = ''
+
+        for bit in text:
+            current_code += bit
+            if current_code in self.code_to_char_mapping:
+                character = self.code_to_char_mapping[current_code]
+                decoded_text += character
+                current_code = ''
+
+        return decoded_text
+
+    def write_decompressed_file(self):
+
+        print Colors.OKBLUE + Colors.BOLD + 'DECOMPRESSING FILE...' + Colors.ENDC
+
+        with CustomOpen(self.compressed_file, 'rb') as input_file, CustomOpen(self.decompressed_file, 'w') as output_file:
+            bit_string = ''
+
+            byte = input_file.read(1)
+            while byte != '':
+                byte = ord(byte)
+                bits = bin(byte)[2:].rjust(BYTE_LENGTH, '0')  # convert to bits and remove '0b'
+                bit_string += bits
+                byte = input_file.read(1)   # read next byte
+
+            encoded_text = self.remove_padding(bit_string)
+            decoded_text = self.decode_text(encoded_text)
+
+            output_file.write(decoded_text)
+
+        print Colors.OKGREEN + Colors.BOLD + 'FILE DECOMPRESSED' + Colors.ENDC
 
 
 ##############################################################################
 if __name__ == '__main__':
 
-    input_file = sys.argv[1]
-    char_frequency = create_char_freq_map(input_file)
-    print char_frequency
-    char_priority_queue = create_priority_queue(char_frequency)
-    total_freq, char_tree = create_priority_binary_tree(char_priority_queue)
-    print '\nTotal characters: {freq} \nCharacter tree: {tree}\n'.format(freq=total_freq, tree=char_tree)
-    char_code_mapping = create_char_code_map(char_tree, {}, '')
-    print char_code_mapping
-    write_compressed_file(input_file, char_code_mapping)
+    input_file = sys.argv[1]        # This script assumes the input file is suffixed '.txt' with no extra periods.
+    h = HuffmanCoding(input_file)
 
+    # Compress text file
+    h.create_char_frequency_map()
+    h.create_priority_queue()
+    h.create_priority_binary_tree()
+    h.create_char_code_map(h.huffman_tree, '')
+    h.write_compressed_file()
 
-##############################################################################
-# Steps:
-
-# - Generate Frequency Table
-# - Put Singleton Trees in Priority Queue
-# - Tree Creation
-# - Code Retrieval
-# - Compression --> ON THIS STEP
-# - Decompression
+    # Decompress binary file
+    h.create_code_char_map()
+    h.write_decompressed_file()
